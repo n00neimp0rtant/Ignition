@@ -221,13 +221,19 @@ END()
 
 HOOK(UIApplication)
 
-- (void)applicationDidFinishLaunching:(UIApplication *)application
+- (BOOL)application:(UIApplication *)application willFinishLaunchingWithOptions:(NSDictionary *)launchOptions
+{
+  UIAlertView *alert = [[UIAlertView alloc] initWithTitle:@"asdf" message:@"asdf" delegate:self cancelButtonTitle:@"OK" otherButtonTitles:nil];
+  [alert show];
+  
   if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"ca.adambell.IgnitionLauncher"]) {
     carplayToggled();
   }
 
   ORIG();
 }
+
+END()
 
 HOOK(SpringBoard)
 
@@ -306,6 +312,10 @@ CFBooleanRef fixed_MGGetBoolAnswer(CFStringRef string)
 }
 
 CTOR({
+  if ([[[NSBundle mainBundle] bundleIdentifier] isEqualToString:@"ca.adambell.IgnitionLauncher"]) {
+    carplayToggled();
+  }
+  
   if (!CARPLAY_ACTIVE) {
     return;
   }
