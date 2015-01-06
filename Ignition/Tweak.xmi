@@ -15,11 +15,83 @@ CONFIG(generator=MobileSubstrate);
 
 #import "PrivateHeaders.h"
 
+#include <dlfcn.h>
 #include "ViewControllerFixes.xm"
 #include "AppFixes.xm"
 
+#define listenToNotification$withCallBack(notification, callback) 	\
+CFNotificationCenterAddObserver(CFNotificationCenterGetDarwinNotifyCenter(), \
+NULL, \
+&callback, \
+CFSTR(notification), \
+NULL, \
+CFNotificationSuspensionBehaviorCoalesce);
+
 // Temporary for now, flipswitch or preferences bundle toggle would make sense in the future.
 #define UIInterfaceIdiomCarPlay 0x3 // Or external display?
+
+static void carplayToggled(CFNotificationCenterRef center, void *observer, CFStringRef name, const void *object, CFDictionaryRef userInfo)
+{
+  _carplayToggled();
+}
+
+static void _carplayToggled() {
+  NSFileManager *fileManager = [NSFileManager defaultManager];
+  NSArray *tweakNames = @[@"ISXLoader",
+                          @"InteractiveMessageNotifications"];
+  
+  if ([fileManager fileExistsAtPath:CARPLAY_ACTIVE_FILE_PATH]) {
+      // Disable CarPlay
+      NSError *error;
+      [fileManager removeItemAtPath:CARPLAY_ACTIVE_FILE_PATH error:&error];
+      if (error) {
+          NSLog(@"CARPLAY_ACTIVATOR_ERROR: %@", error);
+      } else {
+          for (NSString *eachName in tweakNames) {
+              NSError *fileMoveError;
+              
+              if ([fileManager fileExistsAtPath:[NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.dylib", eachName]]) {
+                  NSLog(@"CARPLAY: file exists at %@, disabling now", [NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.dylib", eachName]);
+                  
+                  [fileManager moveItemAtPath:[NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.dylib", eachName]
+                                       toPath:[NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.carplaydisabled", eachName]
+                                        error:&fileMoveError];
+                  
+                  if (fileMoveError) {
+                      NSLog(@"CARPLAY_ACTIVATOR_ERROR: %@", fileMoveError);
+                  }
+              } else {
+                  NSLog(@"CARPLAY: file does NOT exist at %@", [NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.dylib", eachName]);
+              }
+          }
+      }
+  } else {
+      BOOL enabledCarPlay = [fileManager createFileAtPath:CARPLAY_ACTIVE_FILE_PATH contents:[@"canhaz?" dataUsingEncoding:NSUTF8StringEncoding] attributes:nil];
+      if (!enabledCarPlay) {
+          NSLog(@"CARPLAY_ACTIVATOR_ERROR: Unable to create CarPlay Activator file.");
+      } else {
+          for (NSString *eachName in tweakNames) {
+              NSError *fileMoveError;
+              
+              if ([fileManager fileExistsAtPath:[NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.carplaydisabled", eachName]]) {
+                  NSLog(@"CARPLAY: file exists at %@, enabling now", [NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.carplaydisabled", eachName]);
+                  
+                  [fileManager moveItemAtPath:[NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.carplaydisabled", eachName]
+                                       toPath:[NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.dylib", eachName]
+                                        error:&fileMoveError];
+                  
+                  if (fileMoveError) {
+                      NSLog(@"CARPLAY_ACTIVATOR_ERROR: %@", fileMoveError);
+                  }
+              } else {
+                  NSLog(@"CARPLAY: file does NOT exist at %@", [NSString stringWithFormat:@"/Library/MobileSubstrate/DynamicLibraries/%@.carplaydisabled", eachName]);
+              }
+          }
+      }
+  }
+  
+  system("killall backboardd");
+}
 
 GROUP(CARPLAY_HAX);
 
@@ -161,6 +233,19 @@ HOOK(FBSDisplay)
 END()
 
 HOOK(SpringBoard)
+
+- (id)init {
+  listenToNotification$withCallBack("ca.adambell.ignition.carplaytoggled", carplayToggled);
+  return ORIG();
+}
+
+- (BOOL)launchApplicationWithIdentifier:(NSString *)identifier suspended:(BOOL)suspended {
+  if ([identifier isEqualToString:@"ca.adambell.IgnitionLauncher"]) {
+    _carplayToggled();
+  }
+  
+  return ORIG();
+}
 
 // Activates CarPlay when SpringBoard launches (only for debugging purposes atm).
 - (void)applicationDidFinishLaunching:(UIApplication *)application

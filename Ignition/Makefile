@@ -3,7 +3,7 @@ THEOS_DEVICE_PORT=2222
 GO_EASY_ON_ME=1
 
 TARGET = iphone:clang:latest:8.0
-ARCHS = armv7 armv7s arm64
+ARCHS = arm64
 
 include /opt/theos/makefiles/common.mk
 
